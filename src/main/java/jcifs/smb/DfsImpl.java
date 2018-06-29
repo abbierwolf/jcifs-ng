@@ -686,34 +686,26 @@ public class DfsImpl implements DfsResolver {
             dr = null;
         }
 
+        if (dr == null) {
+            DfsReferralDataInternal rootDr = links.map.get("\\");
+            if (rootDr != null) {
+                try (SmbTransportInternal trans = tf.getTransportPool()
+                        .getSmbTransport(tf,
+                                rootDr.getServer(), 0, false, !tf.getCredentials().isAnonymous()
+                                        && tf.getConfig().isSigningEnabled() && tf.getConfig().isIpcSigningEnforced())
+                        .unwrap(SmbTransportImpl.class)) {
+                    dr = resolveLinkDfs(tf, domain, root, path, link, links, trans);
+                } catch (IOException e) {
+                    // root failed continue with DC
+                }
+            }
+        }
+
         if ( dr == null ) {
             try ( SmbTransportInternal trans = getDc(tf, domain).unwrap(SmbTransportInternal.class) ) {
                 if ( trans == null )
                     return null;
-
-                dr = getReferral(tf, trans, domain, domain, trans.getRemoteHostName(), root, path);
-                if ( dr != null ) {
-
-                    if ( tf.getConfig().isDfsConvertToFQDN() && dr instanceof DfsReferralDataImpl ) {
-                        ( (DfsReferralDataImpl) dr ).fixupDomain(domain);
-                    }
-
-                    dr.stripPathConsumed(1 + domain.length() + 1 + root.length());
-
-                    if ( dr.getPathConsumed() > ( path != null ? path.length() : 0 ) ) {
-                        log.error("Consumed more than we provided");
-                    }
-
-                    link = path != null && dr.getPathConsumed() > 0 ? path.substring(0, dr.getPathConsumed()) : "\\";
-                    dr.setLink(link);
-                    if ( log.isTraceEnabled() ) {
-                        log.trace("Have referral " + dr);
-                    }
-                    links.map.put(link, dr);
-                }
-                else {
-                    log.debug("No referral found for " + link);
-                }
+                dr = resolveLinkDfs(tf, domain, root, path, link, links, trans);
             }
         }
         else if ( log.isTraceEnabled() ) {
@@ -722,8 +714,37 @@ public class DfsImpl implements DfsResolver {
         return dr;
     }
 
+    private DfsReferralDataInternal resolveLinkDfs(CIFSContext tf, String domain, String root, String path,
+            String pLink, CacheEntry<DfsReferralDataInternal> links, SmbTransportInternal trans)
+            throws SmbAuthException {
+        DfsReferralDataInternal dr;
+        String link = pLink;
+        dr = getReferral(tf, trans, domain, domain, trans.getRemoteHostName(), root, path);
+        if (dr != null) {
 
-    /**
+            if (tf.getConfig().isDfsConvertToFQDN() && dr instanceof DfsReferralDataImpl) {
+                ((DfsReferralDataImpl) dr).fixupDomain(domain);
+            }
+
+            dr.stripPathConsumed(1 + domain.length() + 1 + root.length());
+
+            if (dr.getPathConsumed() > (path != null ? path.length() : 0)) {
+                log.error("Consumed more than we provided");
+            }
+
+            link = path != null && dr.getPathConsumed() > 0 ? path.substring(0, dr.getPathConsumed()) : "\\";
+            dr.setLink(link);
+            if (log.isTraceEnabled()) {
+                log.trace("Have referral " + dr);
+            }
+            links.map.put(link, dr);
+        } else {
+            log.debug("No referral found for " + link);
+        }
+        return dr;
+    }
+
+	/**
      * @param domain
      * @param root
      * @param path
