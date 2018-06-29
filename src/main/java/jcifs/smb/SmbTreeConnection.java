@@ -522,7 +522,7 @@ class SmbTreeConnection {
                 : loc.getUNCPath();
         String share = loc.getShare();
 
-        DfsReferralData start = referral != null ? referral : this.ctx.getDfs().resolve(this.ctx, hostName, loc.getShare(), path);
+        DfsReferralData start = referral != null ? referral : this.ctx.getDfs().resolve(this.ctx, hostName, loc.getShare(), null);
         DfsReferralData dr = start;
         IOException last = null;
         do {
